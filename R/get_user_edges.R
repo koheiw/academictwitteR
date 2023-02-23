@@ -82,7 +82,7 @@ get_user_edges <- function(x, bearer_token, wt, verbose = TRUE, start_tweets = N
       }
       dat <- make_query(url = requrl, params = params, bearer_token = bearer_token, verbose = verbose)
       next_token <- dat$meta$next_token #this is NULL if there are no pages left
-      if (wt == "liked_tweets") {
+      if (wt == "liked_tweets" && nrow(dat$data) > 0) {
         created_at <- as.POSIXct(dat$data$created_at, tz = "UTC")
         if (is.null(start_tweets)) {
           start_tweets <- min(created_at, na.rm = TRUE)
