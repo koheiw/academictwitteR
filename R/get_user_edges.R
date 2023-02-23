@@ -40,7 +40,7 @@ get_user_following <- function(x, bearer_token = get_bearer(), ...){
   get_user_edges(x = x, bearer_token = bearer_token, wt = "following", ...)
 }
 
-get_user_edges <- function(x, bearer_token, wt, verbose = TRUE){
+get_user_edges <- function(x, bearer_token, wt, verbose = TRUE, start_tweets = NULL, end_tweets = NULL){
   bearer_token <- check_bearer(bearer_token)
   
   url <- "https://api.twitter.com/2/users/"
@@ -57,7 +57,7 @@ get_user_edges <- function(x, bearer_token, wt, verbose = TRUE){
       "max_results" = 1000,
       "user.fields" = "created_at,description,entities,id,location,name,pinned_tweet_id,profile_image_url,protected,public_metrics,url,username,verified,withheld"
     )
-  } else if (wt == "liked_tweets"){
+  } else if (wt == "liked_tweets") {
     endpoint <- "/liked_tweets"
     params <- list(
       "max_results" = 100,
@@ -71,7 +71,7 @@ get_user_edges <- function(x, bearer_token, wt, verbose = TRUE){
   }
   
   new_df <- data.frame()
-  for(i in seq_along(x)){
+  for (i in seq_along(x)){
     cat(paste0("Processing ",x[i],"\n"))
     next_token <- ""
     while (!is.null(next_token)) {
@@ -80,13 +80,31 @@ get_user_edges <- function(x, bearer_token, wt, verbose = TRUE){
       if(next_token!=""){
         params[["pagination_token"]] <- next_token
       }
-      dat <- make_query(url = requrl, params = params, bearer_token = bearer_token, verbose = verbose)      
+      dat <- make_query(url = requrl, params = params, bearer_token = bearer_token, verbose = verbose)
       next_token <- dat$meta$next_token #this is NULL if there are no pages left
-      new_rows <- dat$data
-      new_rows$from_id <- x[i]
+      if (wt == "liked_tweets") {
+        created_at <- as.POSIXct(dat$data$created_at, tz = "UTC")
+        if (is.null(start_tweets)) {
+          start_tweets <- min(created_at, na.rm = TRUE)
+        } else {
+          start_tweets <- as.POSIXct(start_tweets, tz = "UTC")
+        }
+        if (is.null(end_tweets)) {
+          end_tweets <- max(created_at, na.rm = TRUE)
+        } else {
+          end_tweets <- as.POSIXct(end_tweets, tz = "UTC")
+        }
+        new_rows <- dat$data[start_tweets <= created_at & created_at <= end_tweets,]
+        if (tail(created_at, 1) < start_tweets)
+          next_token <- NULL
+      } else {
+        new_rows <- dat$data
+      }
+      
+      new_rows$from_id <- rep(x[i], nrow(new_rows))
       new_df <- dplyr::bind_rows(new_df, new_rows) # add new rows
       
-      cat("Total data points: ",nrow(new_df), "\n")
+      cat("Total data points: ", nrow(new_df), "\n")
       Sys.sleep(1)
       if (is.null(next_token)) {
         if(verbose) {
