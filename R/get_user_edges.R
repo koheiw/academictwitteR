@@ -82,7 +82,8 @@ get_user_edges <- function(x, bearer_token, wt, verbose = TRUE, start_tweets = N
       }
       dat <- make_query(url = requrl, params = params, bearer_token = bearer_token, verbose = verbose)
       next_token <- dat$meta$next_token #this is NULL if there are no pages left
-      if (wt == "liked_tweets" && nrow(dat$data) > 0) {
+      tryCatch({
+      if (wt == "liked_tweets" && !is.null(dat$data)) {
         created_at <- as.POSIXct(dat$data$created_at, tz = "UTC")
         if (is.null(start_tweets)) {
           start_tweets <- min(created_at, na.rm = TRUE)
@@ -97,12 +98,18 @@ get_user_edges <- function(x, bearer_token, wt, verbose = TRUE, start_tweets = N
         new_rows <- dat$data[start_tweets <= created_at & created_at <= end_tweets,]
         if (tail(created_at, 1) < start_tweets)
           next_token <- NULL
-      } else {
         new_rows <- dat$data
+        new_rows$from_id <- rep(x[i], nrow(new_rows))
+        new_df <- dplyr::bind_rows(new_df, new_rows) # add new rows
       }
       
-      new_rows$from_id <- rep(x[i], nrow(new_rows))
-      new_df <- dplyr::bind_rows(new_df, new_rows) # add new rows
+      
+      }, error = function(e) {
+        print(e)
+        browser()
+        #save(dat, next_token, new_rows, file = "debug.RDA")
+      })
+      
       
       cat("Total data points: ", nrow(new_df), "\n")
       Sys.sleep(1)
